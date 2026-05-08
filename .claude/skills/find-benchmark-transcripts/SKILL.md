@@ -5,15 +5,17 @@ description: Locate Claude Code session artifacts on disk for UnsupervisedSystem
 
 # Find Benchmark Transcripts
 
-> **WARNING: Full transcripts are suppressed.**
-> `UnsupervisedSystem` passes `--no-session-persistence` to every
-> `unsupervised -p` invocation (see
-> `systems/unsupervised/unsupervised_system.py` line 159).
-> This flag prevents Claude Code from writing the `*.jsonl` conversation
-> transcript it normally keeps under `~/.claude/projects/`. Full turn-by-turn
-> transcripts DO NOT exist on disk for these sessions.
->
-> What **is** still recoverable is listed below.
+`UnsupervisedSystem` runs `unsupervised -p` against the analyst, and
+Claude Code persists the full conversation transcript as JSONL under
+`~/.claude/projects/-<mangled-cwd>/<session-uuid>.jsonl`. That's the
+primary artifact this skill locates.
+
+> **Historical note.** Earlier versions of the SUT passed
+> `--no-session-persistence`, which suppressed those JSONL transcripts
+> entirely. That flag has since been removed
+> (`systems/unsupervised/unsupervised_system.py`). If you're auditing an
+> old run that was made with the flag, only the smaller artifacts in the
+> table below will exist.
 
 ---
 
@@ -21,12 +23,12 @@ description: Locate Claude Code session artifacts on disk for UnsupervisedSystem
 
 | Location | What survives | Notes |
 |---|---|---|
-| `~/.cache/claude-cli-nodejs/-<mangled-cwd>/mcp-logs-*/` | MCP server logs — `<ISO-ts>.jsonl` per session, a few KB each | **Richest surviving artifact.** Contains session id + cwd on first line. |
+| `~/.claude/projects/-<mangled-cwd>/<session-uuid>.jsonl` | **Full conversation transcript** — every user/assistant turn, tool call, tool result | Primary artifact. One JSONL per session. |
+| `~/.cache/claude-cli-nodejs/-<mangled-cwd>/mcp-logs-*/` | MCP server logs — `<ISO-ts>.jsonl` per session, a few KB each | Per-MCP-server log; useful for confirming session id + cwd on first line. |
 | `/tmp/claude-1000/-<mangled-cwd>/<session-uuid>/tasks/` | Empty-but-named session directories | Confirms session ids and approximate timing (dir mtime). |
 | `/workspaces/Kramabench/system_scratch/UnsupervisedSystem/<task_id>/` | `prompt.txt`, `run.stdout.txt`, `run.stderr.txt`, `pipeline.md`, `error.txt` | Written by our SUT, not Claude Code. Most useful for debugging. |
 | `/workspaces/unsup-areas/<domain>/outputs/<task_id>/pipeline.md` | Final pipeline markdown written by the analyst | Written by the Claude Code session into the area dir. |
 | `/workspaces/unsup-areas/<domain>/queries/adhoc/<task_id>/` | Intermediate query files | Also written by the session into the area dir. |
-| `~/.claude/projects/` | Nothing (confirm absence) | `--no-session-persistence` suppresses JSONL here. |
 
 ---
 
@@ -51,29 +53,32 @@ And the tmp session dir root is:
 Use these shell snippets. Replace `<DOMAIN>` with the benchmark domain
 (e.g. `environment`, `legal`, `astronomy`).
 
-**1. Find recent MCP logs (best signal):**
+**1. Find recent full transcripts (primary signal):**
+```bash
+find ~/.claude/projects/-workspaces-unsup-areas-<DOMAIN> -name '*.jsonl' -mmin -180 2>/dev/null | sort
+```
+Or across all domains, if you don't know which:
+```bash
+find ~/.claude/projects -path '*-unsup-areas-*' -name '*.jsonl' -mmin -180 2>/dev/null | sort
+```
+
+**2. Find recent MCP logs (corroborating signal):**
 ```bash
 find ~/.cache/claude-cli-nodejs -name '*.jsonl' -newer /tmp/kbench-run.log 2>/dev/null | sort
 ```
 If no marker file exists, use a timestamp approach:
 ```bash
-find ~/.cache/claude-cli-nodejs -name '*.jsonl' -mmin -120 2>/dev/null | sort
+find ~/.cache/claude-cli-nodejs -name '*.jsonl' -mmin -180 2>/dev/null | sort
 ```
 
-**2. Browse all MCP log dirs for a specific domain:**
+**3. Browse all MCP log dirs for a specific domain:**
 ```bash
 ls -la ~/.cache/claude-cli-nodejs/-workspaces-unsup-areas-<DOMAIN>/ 2>/dev/null
 ```
 
-**3. Check tmp session dirs (session uuid directories):**
+**4. Check tmp session dirs (session uuid directories):**
 ```bash
 ls -la /tmp/claude-1000/-workspaces-unsup-areas-<DOMAIN>/ 2>/dev/null
-```
-
-**4. Confirm absence of full transcripts in ~/.claude/projects:**
-```bash
-find ~/.claude/projects -name '*.jsonl' -mmin -120 2>/dev/null | wc -l
-# Expect 0 when --no-session-persistence is active
 ```
 
 **5. Gather all per-task SUT scratch for a domain run:**
@@ -124,8 +129,9 @@ Prompt template to pass to the subagent:
 You are finding Claude Code session artifacts for a recent KramaBench
 UnsupervisedSystem run on domain "<DOMAIN>".
 
-NOTE: --no-session-persistence suppresses full *.jsonl transcripts under
-~/.claude/projects/. Full transcripts do NOT exist. Focus on:
+Primary artifact = full JSONL transcript under
+~/.claude/projects/-workspaces-unsup-areas-<DOMAIN>/<session-uuid>.jsonl.
+Secondary artifacts:
   - MCP logs under ~/.cache/claude-cli-nodejs/-workspaces-unsup-areas-<DOMAIN>/
   - Session dirs under /tmp/claude-1000/-workspaces-unsup-areas-<DOMAIN>/
   - Per-task SUT scratch under /workspaces/Kramabench/system_scratch/UnsupervisedSystem/
@@ -134,11 +140,14 @@ NOTE: --no-session-persistence suppresses full *.jsonl transcripts under
 Path mangling rule: replace each '/' with '-' (leading '/' → '-').
 
 Run these commands (replace <DOMAIN> with the actual domain):
-  find ~/.cache/claude-cli-nodejs -name '*.jsonl' -mmin -120 2>/dev/null | sort
+  find ~/.claude/projects/-workspaces-unsup-areas-<DOMAIN> -name '*.jsonl' -mmin -180 2>/dev/null | sort
+  find ~/.cache/claude-cli-nodejs -name '*.jsonl' -mmin -180 2>/dev/null | sort
   ls -la /tmp/claude-1000/-workspaces-unsup-areas-<DOMAIN>/ 2>/dev/null
   ls /workspaces/Kramabench/system_scratch/UnsupervisedSystem/ 2>/dev/null
   find /workspaces/unsup-areas/<DOMAIN>/outputs -name 'pipeline.md' 2>/dev/null | sort
 
 Report absolute paths grouped by session (session id, domain, task id, file
-sizes and mtimes). Keep report under 250 words.
+sizes and mtimes). Pair each ~/.claude/projects/.../<uuid>.jsonl with the
+corresponding /tmp/claude-1000/.../<uuid>/ dir when both exist. Keep report
+under 250 words.
 ```

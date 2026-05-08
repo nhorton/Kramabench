@@ -156,7 +156,6 @@ class UnsupervisedSystem(System):
             prompt,
             "--output-format",
             "json",
-            "--no-session-persistence",
             "--permission-mode",
             "bypassPermissions",
         ]

@@ -95,7 +95,7 @@ def test_process_dataset_runs_install_then_connect_then_writes_manifest(tmp_path
     assert len(calls) == 2
     assert calls[0][:2] == [sut.unsupervised_bin, "install"]
     assert calls[1][:2] == [sut.unsupervised_bin, "-p"]
-    assert "--no-session-persistence" in calls[1]
+    assert "--permission-mode" in calls[1]
     assert "--max-budget-usd" in calls[1]
 
 

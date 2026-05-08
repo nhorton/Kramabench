@@ -162,7 +162,8 @@ Agent(
   re-running the task with `claude --add-dir` constrained to just the
   area dir (instead of `--permission-mode bypassPermissions`) so the
   agent can't reach above the sandbox in future runs.
-- `INCONCLUSIVE` — happens when transcripts were suppressed by
-  `--no-session-persistence`. Suggest temporarily removing that flag
-  from `systems/unsupervised/unsupervised_system.py` and re-running the
-  task before re-auditing.
+- `INCONCLUSIVE` — happens for older runs whose transcripts were
+  suppressed by `--no-session-persistence` (no longer set by the SUT —
+  current runs persist full JSONL transcripts to
+  `~/.claude/projects/-workspaces-unsup-areas-<DOMAIN>/<uuid>.jsonl`).
+  Suggest re-running the task and re-auditing.

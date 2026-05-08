@@ -41,6 +41,27 @@ progress.
 
 3. Stdout shows `Total score is: …` at the end.
 
+## Update BENCHMARK_STATUS.md after every run
+
+After a run finishes (whether `done`, `partial`, or `error`), update
+`/workspaces/Kramabench/BENCHMARK_STATUS.md`:
+
+1. **Locate the workload's row(s)** — initially there's one `todo` placeholder
+   row per `(sut, workload)`.
+2. **On success:** delete the placeholder and append one row per
+   `(task_id, metric)` pair from the new
+   `results/<SUT>/<workload>_measures_<timestamp>.csv`. Set `status=done`,
+   `run_timestamp` to the CSV's timestamp suffix, and `measures_csv` to the
+   CSV's repo-relative path.
+3. **On error or no CSV produced:** keep a single row, set `status=error`
+   (or `partial` if some tasks scored), and put the failure reason in `notes`.
+4. **On re-run of an already-done workload:** replace its rows with rows from
+   the newer CSV. Don't keep stale rows.
+
+The table is the atomic source of truth — aggregates (per-domain mean success,
+F1, etc.) are computed by grouping rows, never stored as columns. Don't add
+summary/aggregate columns to the table.
+
 ## Key flags
 
 | Flag | Effect |
