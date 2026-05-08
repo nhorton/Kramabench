@@ -112,6 +112,7 @@ def main():
         dataset_directory = os.path.join(project_root_dir, f"data/{dataset_name}/tiny")
     else:
         dataset_name = workload
+        dataset_directory = os.path.join(project_root_dir, f"data/{dataset_name}/input")
 
     results_df = None
     if args.use_evaluation_cache:
@@ -154,8 +155,6 @@ def main():
             use_truth_subset = args.use_truth_subset,
             num_workers=args.num_workers
         )
-
-        dataset_directory = os.path.join(project_root_dir, f"data/{dataset_name}/input")
 
         evaluation_results = benchmark.run_benchmark(
             dataset_directory=dataset_directory,

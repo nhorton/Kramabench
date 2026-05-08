@@ -7,3 +7,4 @@ from .dummy_system import DummySystem
 from .dsguru import *
 from .smolagents import *
 from .unsupervised import *
+from .claude_code import *

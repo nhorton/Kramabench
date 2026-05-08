@@ -18,7 +18,7 @@ python /workspaces/Kramabench/evaluate.py \
     --sut <SUTClassName> \
     --workload <workload-name> \
     --num_workers 1 \
-    --verbose 2>&1 | tee /tmp/kbench-run.log
+    --verbose 2>&1 | tee /tmp/kbench-<sut>-<workload>.log
 ```
 
 For a smoke-test (fewer API calls), add `--no_pipeline_eval`.
@@ -27,9 +27,33 @@ For a smoke-test (fewer API calls), add `--no_pipeline_eval`.
 or full domains: `archeology`, `astronomy`, `biomedical`, `environment`,
 `legal`, `wildfire`.
 
-**For long-running jobs:** use `Bash(run_in_background=true)` to redirect
-to `/tmp/kbench-run.log`, then `Monitor: tail -f /tmp/kbench-run.log` to watch
-progress.
+## Run both SUTs in parallel
+
+Each KramaBench workload should be run against **both** the `UnsupervisedSystem`
+and `ClaudeCodeSystem` SUTs. The two are independent (different `results/<SUT>/`
+output dirs and different status files), so launch them concurrently rather
+than serially.
+
+For a given workload, kick off both runs as separate background Bash calls in
+the **same** assistant message — that schedules them to run in parallel:
+
+```bash
+# call 1 (run_in_background=true)
+python /workspaces/Kramabench/evaluate.py --sut UnsupervisedSystem \
+    --workload <workload> --num_workers 1 --verbose \
+    2>&1 | tee /tmp/kbench-unsupervised-<workload>.log
+
+# call 2 (run_in_background=true), in the SAME message as call 1
+python /workspaces/Kramabench/evaluate.py --sut ClaudeCodeSystem \
+    --workload <workload> --num_workers 1 --verbose \
+    2>&1 | tee /tmp/kbench-claude-code-<workload>.log
+```
+
+When each finishes, update **its own** status file (see below) — never mix
+results from the two SUTs into one file.
+
+**For long-running jobs:** redirect to per-run log files as shown, then
+`Monitor: tail -f /tmp/kbench-<sut>-<workload>.log` to watch progress.
 
 ## Reading results
 
@@ -41,11 +65,23 @@ progress.
 
 3. Stdout shows `Total score is: …` at the end.
 
-## Update BENCHMARK_STATUS.csv after every run
+## Update the per-SUT status CSV after every run
 
-After a run finishes (whether `done`, `partial`, or `error`), update
-`/workspaces/Kramabench/BENCHMARK_STATUS.csv`. Columns:
+There is one status CSV per SUT — pick the one that matches the SUT you ran:
+
+| SUT | Status file |
+|---|---|
+| `UnsupervisedSystem` | `/workspaces/Kramabench/UNSUPERVISED_BENCHMARK_STATUS.csv` |
+| `ClaudeCodeSystem` | `/workspaces/Kramabench/CLAUDE_CODE_BENCHMARK_STATUS.csv` |
+
+Never write `UnsupervisedSystem` rows into the Claude Code file or vice versa.
+When you run both SUTs in parallel for a workload, each finishing run updates
+**only** its own file.
+
+Columns (both files):
 `sut,workload,task_id,metric,value,status,run_timestamp,measures_csv,notes`.
+
+After a run finishes (whether `done`, `partial`, or `error`):
 
 1. **Locate the workload's row(s)** — initially there's one `todo` placeholder
    row per `(sut, workload)` with `task_id`, `metric`, `value` empty.
@@ -74,10 +110,15 @@ summary/aggregate columns.
 | `--no_pipeline_eval` | Skip LLM-graded pipeline quality (saves API calls) |
 | `--num_workers N` | Parallelism (default 8) |
 
-## UnsupervisedSystem SUT (this branch)
+## SUTs on this branch
 
-Uses the `unsupervised` CLI (Claude Code wrapper). Must be logged into
-Claude Code; verify with `claude --version`. See [REFERENCE.md](./REFERENCE.md)
-for lifecycle, constraints, expected runtimes, and troubleshooting.
+- **`UnsupervisedSystem`** — uses the `unsupervised` CLI (Claude Code
+  wrapper). Must be logged into Claude Code; verify with `claude --version`.
+- **`ClaudeCodeSystem`** — drives Claude Code directly without the
+  `unsupervised` wrapper. Same auth requirement.
+
+Both share the picklability constraints in `benchmark/benchmark_api.py`. See
+[REFERENCE.md](./REFERENCE.md) for lifecycle, constraints, expected runtimes,
+and troubleshooting.
 
 For full workload table, all flags, SUT architecture details, and known gotchas, see [REFERENCE.md](./REFERENCE.md).

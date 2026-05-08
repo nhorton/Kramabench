@@ -70,7 +70,7 @@ def test_process_dataset_runs_install_then_connect_then_writes_manifest(tmp_path
         calls.append(list(argv))
         # First call is `unsupervised install`; we need to create the scaffold
         # marker so subsequent runs see it.
-        if argv[:2] == [sut.unsupervised_bin, "install"]:
+        if argv[:2] == [sut.cli_bin, "install"]:
             target = Path(argv[2])
             (target / "datasources" / "local_files").mkdir(parents=True, exist_ok=True)
             (target / "datasources" / "local_files" / "engine_factory.py").write_text("# stub\n")
@@ -78,7 +78,7 @@ def test_process_dataset_runs_install_then_connect_then_writes_manifest(tmp_path
         # Otherwise it's the connect-datasource invocation.
         return _ok_run(stdout=_ok_claude_json(answer="connect-complete"))
 
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run", side_effect=fake_run):
+    with patch("systems.claude_based.base.subprocess.run", side_effect=fake_run):
         sut.process_dataset(str(ds))
 
     assert sut.domain == "legal"
@@ -93,10 +93,13 @@ def test_process_dataset_runs_install_then_connect_then_writes_manifest(tmp_path
     assert manifest["kramabench_data_dir"] == str(ds.resolve())
     # Two subprocess invocations: install + connect.
     assert len(calls) == 2
-    assert calls[0][:2] == [sut.unsupervised_bin, "install"]
-    assert calls[1][:2] == [sut.unsupervised_bin, "-p"]
+    assert calls[0][:2] == [sut.cli_bin, "install"]
+    assert calls[1][:2] == [sut.cli_bin, "-p"]
     assert "--permission-mode" in calls[1]
     assert "--max-budget-usd" in calls[1]
+    # The connect-datasource prompt must NOT carry the per-task /deepwork prefix.
+    connect_prompt = calls[1][calls[1].index("-p") + 1]
+    assert not connect_prompt.startswith("/deepwork"), connect_prompt[:60]
 
 
 def test_process_dataset_idempotent_when_manifest_matches(tmp_path: Path) -> None:
@@ -104,18 +107,18 @@ def test_process_dataset_idempotent_when_manifest_matches(tmp_path: Path) -> Non
     ds = _make_dataset(tmp_path, name="legal", basename="input")
 
     def first_run(argv, **kwargs):
-        if argv[:2] == [sut.unsupervised_bin, "install"]:
+        if argv[:2] == [sut.cli_bin, "install"]:
             target = Path(argv[2])
             (target / "datasources" / "local_files").mkdir(parents=True, exist_ok=True)
             (target / "datasources" / "local_files" / "engine_factory.py").write_text("# stub\n")
             return _ok_run()
         return _ok_run(stdout=_ok_claude_json(answer="connect-complete"))
 
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run", side_effect=first_run):
+    with patch("systems.claude_based.base.subprocess.run", side_effect=first_run):
         sut.process_dataset(str(ds))
 
     # Second call should not invoke subprocess at all.
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run") as mock_run:
+    with patch("systems.claude_based.base.subprocess.run") as mock_run:
         sut.process_dataset(str(ds))
         assert mock_run.call_count == 0
 
@@ -154,14 +157,16 @@ def test_serve_query_returns_contract_and_extracts_pipeline(tmp_path: Path) -> N
     def fake_run(argv, **kwargs):
         # Sanity-check the prompt was constructed properly.
         prompt = argv[argv.index("-p") + 1]
-        assert "What is X?" in prompt
+        # Per-task prompts must be prefixed with the unsupervised /deepwork
+        # mode selector so the analyst routes the request correctly.
+        assert prompt.startswith("/deepwork Data Query: What is X?"), prompt[:80]
         assert "datasources/local_files/legal/" in prompt
         assert "outputs/legal-easy-1/pipeline.md" in prompt
         # subset_files was provided -> they must appear in the prompt.
         assert "a.csv" in prompt
         return _ok_run(stdout=_ok_claude_json(answer="42", input_tokens=100, output_tokens=20))
 
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run", side_effect=fake_run):
+    with patch("systems.claude_based.base.subprocess.run", side_effect=fake_run):
         result = sut.serve_query(query="What is X?", query_id=task_id, subset_files=["a.csv"])
 
     assert result["explanation"]["answer"] == "42"
@@ -182,7 +187,7 @@ def test_serve_query_returns_empty_response_on_nonzero_exit_and_logs_budget_hit(
     def fake_run(argv, **kwargs):
         return _ok_run(stdout="", stderr="error: --max-budget-usd cap reached", returncode=2)
 
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run", side_effect=fake_run):
+    with patch("systems.claude_based.base.subprocess.run", side_effect=fake_run):
         result = sut.serve_query(query="q", query_id="legal-easy-1", subset_files=[])
 
     assert result == {
@@ -206,7 +211,7 @@ def test_serve_query_returns_empty_response_on_timeout(tmp_path: Path) -> None:
     def fake_run(argv, **kwargs):
         raise subprocess.TimeoutExpired(cmd=argv, timeout=1, output="", stderr="")
 
-    with patch("systems.unsupervised.unsupervised_system.subprocess.run", side_effect=fake_run):
+    with patch("systems.claude_based.base.subprocess.run", side_effect=fake_run):
         result = sut.serve_query(query="q", query_id="legal-easy-1", subset_files=[])
 
     assert result["explanation"]["answer"] == ""

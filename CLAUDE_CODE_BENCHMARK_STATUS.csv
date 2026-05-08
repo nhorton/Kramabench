@@ -1,0 +1,9 @@
+sut,workload,task_id,metric,value,status,run_timestamp,measures_csv,notes
+ClaudeCodeSystem,archeology,,,,todo,,,
+ClaudeCodeSystem,astronomy,,,,todo,,,
+ClaudeCodeSystem,biomedical,,,,todo,,,
+ClaudeCodeSystem,environment,,,,todo,,,
+ClaudeCodeSystem,legal,,,,todo,,,
+ClaudeCodeSystem,wildfire,,,,todo,,,
+ClaudeCodeSystem,environment-tiny,,,,todo,,,
+ClaudeCodeSystem,legal-tiny,,,,todo,,,
