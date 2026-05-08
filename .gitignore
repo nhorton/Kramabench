@@ -1,6 +1,9 @@
 # Evaluation scripts
 scripts/evaluation/
 
+# Claude Code harness runtime state
+.claude/scheduled_tasks.lock
+
 # MacOS junk
 .DS_Store
 # obscured workloads and datasets
