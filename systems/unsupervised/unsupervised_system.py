@@ -20,6 +20,11 @@ from systems.claude_based.base import ClaudeBasedSystem
 
 UNSUPERVISED_BIN = "unsupervised"
 
+CONNECT_PROMPT = """\
+Walk every file under `datasources/local_files/{domain}/` recursively. For
+each file, run the `/deepwork connect datasource <filename>` workflow.
+"""
+
 
 class UnsupervisedSystem(ClaudeBasedSystem):
     """SUT that drives the `unsupervised` CLI (Claude Code wrapper)."""
@@ -29,7 +34,7 @@ class UnsupervisedSystem(ClaudeBasedSystem):
     AREAS_DIRNAME = "unsup-areas"
     # Routes every task through unsupervised's `/deepwork` analyst mode.
     # Not applied to the connect-datasource prompt (catalog seeding).
-    REQUEST_PREFIX = "/deepwork Data Query: "
+    REQUEST_PREFIX = "/deepwork ad hoc query: "
 
     def __init__(
         self,
@@ -62,4 +67,19 @@ class UnsupervisedSystem(ClaudeBasedSystem):
         if proc.returncode != 0:
             raise RuntimeError(
                 f"unsupervised install failed (exit {proc.returncode}); see {log_dir}/install.stderr.txt"
+            )
+
+    def _connect_step(self, domain: str, area_dir: Path, log_dir: Path) -> None:
+        prompt = CONNECT_PROMPT.format(domain=domain)
+        argv = self._build_invocation(prompt)
+        proc = self._run_subprocess(
+            argv,
+            cwd=str(area_dir),
+            timeout=self.connect_timeout_s,
+            log_dir=log_dir,
+            log_prefix="connect",
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"connect-datasource step failed (exit {proc.returncode}); see {log_dir}/connect.stderr.txt"
             )

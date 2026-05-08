@@ -6,9 +6,10 @@ Both SUTs follow the same lifecycle:
 - `process_dataset` is called once per benchmark run. We build (or reuse) a
   per-domain "area" directory at `../<AREAS_DIRNAME>/<domain>/` peer to the
   KramaBench repo, run an optional CLI-specific install step, hard-copy the
-  domain's data files into `datasources/local_files/<domain>/`, and run a
-  one-shot connect-datasource prompt that seeds catalog markdown for the
-  staged files. Idempotent via a `.kramabench.json` manifest.
+  domain's data files into `datasources/local_files/<domain>/`, and run an
+  optional CLI-specific connect step (e.g. UnsupervisedSystem seeds catalog
+  markdown for the staged files). Idempotent via a `.kramabench.json`
+  manifest.
 - `serve_query` is called per task, possibly from worker processes. Each
   call spawns a fresh non-interactive `<cli> -p` session in the area
   directory. To avoid cross-task interference in the shared area dir, calls
@@ -17,7 +18,7 @@ Both SUTs follow the same lifecycle:
   throughput.
 
 Subclasses configure three class attrs (SYSTEM_NAME, CLI_BIN,
-AREAS_DIRNAME) and may override `_install_step` and
+AREAS_DIRNAME) and may override `_install_step`, `_connect_step`, and
 `_extra_invocation_argv`.
 
 Returns the standard contract dict
@@ -37,31 +38,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from benchmark.benchmark_api import System
-
-CONNECT_PROMPT = """\
-You are seeding the catalog for a new local_files DuckDB datasource.
-
-Walk every file under `datasources/local_files/{domain}/` recursively. For
-each file:
-  - If it is tabular (CSV / Parquet / JSON-lines / similar): infer the
-    schema (column names + types) by sampling a few rows with DuckDB.
-  - If it is unstructured (PDF, HTML, plain text): summarize what kind
-    of content it appears to hold.
-
-For every file write a markdown reference at
-`datasources/local_files/{domain}/catalog/tables/<relative_file_path>.md`,
-creating directories as needed. Each file should record:
-  - the file's relative path,
-  - the inferred schema or content summary,
-  - any notable caveats (encoding issues, ragged rows, etc.).
-
-Then write `datasources/local_files/{domain}/key_tables.md` — a brief
-index of the most important files and what they contain.
-
-Do NOT answer any analytical questions on this run. Output only the
-catalog/index files. When done, reply with the literal text
-"connect-complete" and nothing else.
-"""
 
 PER_TASK_INSTRUCTIONS = """\
 
@@ -183,6 +159,12 @@ class ClaudeBasedSystem(System):
         """Override to run a CLI-specific install/scaffold step. Default: no-op."""
         return
 
+    def _connect_step(self, domain: str, area_dir: Path, log_dir: Path) -> None:
+        """Override to run a CLI-specific connect/catalog-seeding step.
+        Default: no-op (the SUT is expected to discover datasources itself
+        per task)."""
+        return
+
     def _read_manifest(self, manifest_path: Path) -> Dict[str, Any] | None:
         try:
             return json.loads(manifest_path.read_text())
@@ -244,20 +226,8 @@ class ClaudeBasedSystem(System):
         staged_root.mkdir(parents=True, exist_ok=True)
         shutil.copytree(dataset_directory, staged_root, dirs_exist_ok=True)
 
-        # 3. One-shot connect-datasource prompt.
-        prompt = CONNECT_PROMPT.format(domain=domain)
-        argv = self._build_invocation(prompt)
-        proc = self._run_subprocess(
-            argv,
-            cwd=str(area_dir),
-            timeout=self.connect_timeout_s,
-            log_dir=log_dir,
-            log_prefix="connect",
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"connect-datasource step failed (exit {proc.returncode}); see {log_dir}/connect.stderr.txt"
-            )
+        # 3. CLI-specific connect/catalog-seeding step; no-op by default.
+        self._connect_step(domain, area_dir, log_dir)
 
     def serve_query(
         self,
