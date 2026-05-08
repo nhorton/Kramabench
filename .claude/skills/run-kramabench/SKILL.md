@@ -41,13 +41,14 @@ progress.
 
 3. Stdout shows `Total score is: …` at the end.
 
-## Update BENCHMARK_STATUS.md after every run
+## Update BENCHMARK_STATUS.csv after every run
 
 After a run finishes (whether `done`, `partial`, or `error`), update
-`/workspaces/Kramabench/BENCHMARK_STATUS.md`:
+`/workspaces/Kramabench/BENCHMARK_STATUS.csv`. Columns:
+`sut,workload,task_id,metric,value,status,run_timestamp,measures_csv,notes`.
 
 1. **Locate the workload's row(s)** — initially there's one `todo` placeholder
-   row per `(sut, workload)`.
+   row per `(sut, workload)` with `task_id`, `metric`, `value` empty.
 2. **On success:** delete the placeholder and append one row per
    `(task_id, metric)` pair from the new
    `results/<SUT>/<workload>_measures_<timestamp>.csv`. Set `status=done`,
@@ -58,9 +59,9 @@ After a run finishes (whether `done`, `partial`, or `error`), update
 4. **On re-run of an already-done workload:** replace its rows with rows from
    the newer CSV. Don't keep stale rows.
 
-The table is the atomic source of truth — aggregates (per-domain mean success,
+The CSV is the atomic source of truth — aggregates (per-domain mean success,
 F1, etc.) are computed by grouping rows, never stored as columns. Don't add
-summary/aggregate columns to the table.
+summary/aggregate columns.
 
 ## Key flags
 
