@@ -1,0 +1,44 @@
+# Pinned-ish dev-environment requirements for KramaBench.
+#
+# `pip install -e ".[all]"` doesn't work out-of-the-box because the project's
+# pyproject.toml leaves setuptools to auto-discover packages and the repo root
+# has multiple top-level dirs (data/, systems/, experts/, ...). Use this file
+# instead:
+#
+#     pip install -r requirements-dev.txt
+#
+# This installs the same set as `[project] + [project.optional-dependencies].baselines + .dev`,
+# plus a couple of transitive deps that aren't declared but are imported eagerly
+# by benchmark/llm_tools.
+
+# Core (mirrors [project].dependencies)
+pandas>=2.2.3
+numpy>=2.0
+huggingface-hub>=0.29.0
+requests>=2.32.0
+rich>=13.9.0
+python-dotenv>=1.0.0
+pillow>=10.0.0
+jinja2>=3.1.0
+pyyaml>=6.0
+typeguard>=4.0.0
+rouge-score>=0.1.0
+beautifulsoup4>=4.12.0
+wikipedia-api>=0.6.0
+youtube-transcript-api>=0.6.0
+openai==1.72.0
+
+# Baselines (mirrors [project.optional-dependencies].baselines)
+litellm>=1.0.0
+anthropic>=0.7.0
+ollama>=0.4.0
+together>=1.0.0
+PyPDF2>=3.0.0
+
+# Eagerly imported by benchmark/llm_tools/gpt_interface.py but not declared
+# in pyproject.
+untruncate-json
+
+# Dev tooling (mirrors [project.optional-dependencies].dev)
+pytest>=8.0.0
+ruff>=0.1.0
